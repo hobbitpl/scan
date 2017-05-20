@@ -7,7 +7,7 @@ id=$$
 data=`date +%Y%m%d`
 hour=`date +%H%M%S`
 
-echo "Ile skanów? [podaj liczbê & ENTER]: "
+echo "Ile skanów? [podaj liczbe & ENTER]: "
 read ile
 
 x=0
