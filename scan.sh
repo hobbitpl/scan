@@ -19,9 +19,10 @@ x=0
 
 while :
 do
+	num=$(printf "%03d" $x)
         read -p "Nacisnij [ ENTER ] aby zeskanowac jedna kartke lub [ CTRL + C ] aby skonczyc skanowanie"
         echo "Rozpoczynam skanowanie..."
-		filename=scan"_"$varyear"_"$varmonth"_"$varday"_"$varhour"_"$varmin"_"$varsec"_"$x.jpg
+		filename=scan"_"$varyear"_"$varmonth"_"$varday"_"$varhour"_"$varmin"_"$varsec"_"$num.jpg
         scanimage --resolution 150 --mode Gray --format=jpeg > $scanPath/$filename
         convert -rotate 0 $scanPath/$filename $scanPath/$filename
         chmod 664 $scanPath/$filename
