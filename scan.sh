@@ -11,7 +11,7 @@ var_min=`date +%M`
 var_sec=`date +%S`
 
 
-var_output_path='/home/YourHomeDirectory/stuff/temp/tempSkan'
+var_output_path='/home/meblegama/stuff/temp/tempSkan'
 var_resolution=150
 var_site='sitename'
 var_mode='Gray'
