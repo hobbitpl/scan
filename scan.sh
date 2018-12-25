@@ -4,8 +4,6 @@ clear
 
 . local.config
 
-printf $var_output_path
-
 
 id=$$
 
