@@ -1,1 +1,1 @@
-# scan
+Simple script to scan images by sane.
