@@ -1,5 +1,11 @@
 #!/bin/bash
 
+clear
+
+. local.config
+
+printf $var_output_path
+
 
 id=$$
 
@@ -11,19 +17,11 @@ var_min=`date +%M`
 var_sec=`date +%S`
 
 
-var_output_path='/home/meblegama/stuff/temp/tempSkan'
-var_resolution=150
-var_site='sitename'
-var_mode='Gray'
-var_format='jpeg'
-var_rotate=0
-
 #data=`date +%Y%m%d`
 #hour=`date +%H%M%S`
 
 x=0
 
-        clear
 
 while :
 do
