@@ -37,7 +37,8 @@ do
         convert -rotate $var_rotate $var_output_path/$var_filename $var_output_path/$var_filename
         chmod 664 $var_output_path/$var_filename
         echo ""
-        echo "Skan zrobiony i zapisany pod nazwa: " $var_filename
+        figlet "skan zrobiony" 
+        echo "Nazwa pliku:" $var_filename
         echo ""
         let x=x+1
 done
