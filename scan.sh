@@ -38,7 +38,7 @@ do
         chmod 664 $var_output_path/$var_filename
         echo ""
         figlet "skan zrobiony" 
-        echo "Nazwa pliku:" $var_filename
+        echo "Plik zapisano:" $var_output_path/$var_filename
         echo ""
         let x=x+1
 done
