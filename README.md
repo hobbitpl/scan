@@ -1,9 +1,9 @@
-[01;34m.[00m
-├── example.config
-├── local.config
-├── [01;34mold[00m
-│   └── [01;32mscan3.sh[00m
-├── README.md
-└── [01;32mscan.sh[00m
+Simple script to scan images by sane from cli
 
-1 directory, 5 files
+Prerequisites packages:
+
+figlet
+
+sane
+
+scanimage
