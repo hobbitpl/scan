@@ -26,6 +26,8 @@ var_sec=`date +%S`
 
 x=0
 
+#skanowanie wsadowe - działające
+#scanimage --format tiff --batch=$(date +%Y%m%d_%H%M%S)_p%04d.tiff  --resolution 300 --source 'ADF Front'
 
 while :
 do
