@@ -1,6 +1,8 @@
 #!/bin/bash
 # Skanowanie z CLI (SANE). Każdy skan zapisywany jest jako oryginał
-# oraz jako wersja zoptymalizowana (JPEG, mniejszy rozmiar).
+# oraz jako wersja zoptymalizowana (JPEG, mniejszy rozmiar):
+#  Color – jeden plik _opt_
+#  Gray  – dwa pliki: _op0_ (minimalna korekta) i _op9_ (mocna korekta pod pismo/ołówek)
 clear
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 . "$DIR/local.config"
@@ -10,7 +12,8 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 : "${var_opt_quality:=80}"   # jakość JPEG wersji zoptymalizowanej
 : "${var_opt_max_dpi:=300}"  # wersja zoptymalizowana nie przekracza tej rozdzielczości (nie dotyczy Color)
 : "${var_opt_enhance:=1}"    # 1 = automatyczna korekcja bieli/czerni w wersji zoptymalizowanej
-: "${var_opt_gamma:=0.8}"    # < 1 przyciemnia półtony (pismo, ołówek), 1 = bez zmian – tylko Gray
+: "${var_opt_gamma:=0.8}"    # < 1 przyciemnia półtony (pismo, ołówek), 1 = bez zmian – Gray, plik op9
+: "${var_opt_gamma_min:=1.0}"    # gamma dla Gray, plik op0 (1 = bez zmian, > 1 rozjaśnia)
 : "${var_opt_color_gamma:=1.0}"  # gamma dla skanów kolorowych (1 = bez zmian, > 1 rozjaśnia)
 : "${var_adf_source:=ADF Front}"  # źródło dla skanowania z podajnika (ADF Front / ADF Duplex)
 : "${var_adf_color_resolution:=300}"  # dpi dla ADF w kolorze
@@ -183,45 +186,50 @@ show_menu() {
 }
 
 # Adaptacyjna korekcja poziomów na podstawie histogramu.
-# Gray (dokumenty): papier (dominujący jasny poziom) -> biel,
-#   10. percentyl pikseli "tuszu" (ciemniejszych od papieru o >30) -> czerń, gamma var_opt_gamma.
+# Gray (dokumenty), dwa warianty z jednego histogramu:
+#   op9 (mocny): papier (dominujący jasny poziom) -> biel, 10. percentyl pikseli "tuszu"
+#     (ciemniejszych od papieru o >30) -> czerń, gamma var_opt_gamma.
+#   op0 (minimalny): papier -> biel, czerń = 0,5. percentyl całego obrazu (max 40),
+#     gamma var_opt_gamma_min – tylko wybielenie tła, półtony bez przyciemniania.
 # Color (zdjęcia, kolorowe dokumenty): łagodnie, bez przyciemniania –
 #   biel = papier liczony osobno dla R/G/B (balans bieli); gdy brak wyraźnego tła papieru
 #   (< 1% pikseli w szczycie) biel = 99,5. percentyl; czerń = 0,5. percentyl całego
 #   obrazu (max 40), więc obcinane są tylko skrajne cienie; gamma var_opt_color_gamma.
 # auto_levels <obraz> <tryb> <od> <do> – zakres paska postępu w promilach.
-# Ustawia tablicę lvl_args (argumenty dla convert) i opis lvl_info.
+# Ustawia tablice lvl_args (Color / op9) i lvl_args0 (op0) oraz opisy lvl_info, lvl_info0.
 auto_levels() {
-    local img=$1 mode=$2 lo=$3 hi=$4 ch chans paper black gamma papers=() blacks=() n=0 cnt
-    lvl_args=(); lvl_info=""
+    local img=$1 mode=$2 lo=$3 hi=$4 ch chans paper black black0 gamma papers=() blacks=() n=0 cnt
+    lvl_args=(); lvl_info=""; lvl_args0=(); lvl_info0=""
     if [ "$mode" = Color ]; then chans="R G B"; cnt=3; gamma=$var_opt_color_gamma; else chans="R"; cnt=1; gamma=$var_opt_gamma; fi
     for ch in $chans; do
         convert -monitor "$img" -sample 25% -channel "$ch" -separate -depth 8 -format %c histogram:info:"$tmpout" 2> "$monlog" &
         track $! im $(( lo + (hi - lo) * n / cnt )) $(( lo + (hi - lo) * (n + 1) / cnt )) \
             "Optymalizacja" "histogram$([ "$mode" = Color ] && echo " $ch")"
         n=$(( n + 1 ))
-        read -r paper black < <(sed -E 's/^ *([0-9]+): *\( *([0-9]+).*/\2 \1/' "$tmpout" | awk -v mode="$mode" '
+        read -r paper black black0 < <(sed -E 's/^ *([0-9]+): *\( *([0-9]+).*/\2 \1/' "$tmpout" | awk -v mode="$mode" '
                 { c[$1] += $2; t += $2 }
                 END {
                     p = 255
                     for (i = 128; i <= 255; i++) if (c[i] > c[p]) p = i
-                    b = 0
-                    if (mode == "Color") {
-                        if (c[p] < t * 0.01) {
-                            cum = 0
-                            for (i = 255; i >= 0; i--) { cum += c[i]; if (cum >= t * 0.005) { p = i; break } }
-                        }
+                    if (mode == "Color" && c[p] < t * 0.01) {
                         cum = 0
-                        for (i = 0; i < 256; i++) { cum += c[i]; if (cum >= t * 0.005) { b = i; break } }
-                        if (b > 40) b = 40
-                        if (p < 128) p = 255
-                    } else {
+                        for (i = 255; i >= 0; i--) { cum += c[i]; if (cum >= t * 0.005) { p = i; break } }
+                    }
+                    # czerń łagodna: 0,5. percentyl całego obrazu
+                    b0 = 0; cum = 0
+                    for (i = 0; i < 256; i++) { cum += c[i]; if (cum >= t * 0.005) { b0 = i; break } }
+                    if (b0 > 40) b0 = 40
+                    # czerń mocna (Gray op9): 10. percentyl pikseli tuszu
+                    b = b0
+                    if (mode != "Color") {
+                        b = 0; cum = 0
                         for (i = 0; i < p - 30; i++) ink += c[i]
                         if (ink > t * 0.0005)
                             for (i = 0; i < p - 30; i++) { cum += c[i]; if (cum >= ink * 0.10) { b = i; break } }
                         if (b > 160) b = 160
                     }
-                    print p, b
+                    if (p < 128) p = 255
+                    print p, b, b0
                 }')
         papers+=("$paper"); blacks+=("$black")
         [ "$mode" = Color ] && lvl_args+=(-channel "$ch")
@@ -232,6 +240,8 @@ auto_levels() {
         lvl_info="biel RGB $(IFS=/; echo "${papers[*]}") → 255 · czerń $(IFS=/; echo "${blacks[*]}") → 0 · gamma $gamma"
     else
         lvl_info="papier ${papers[0]} → biel · czerń ${blacks[0]} → 0 · gamma $gamma"
+        lvl_args0=(-level "$(awk -v b="$black0" -v p="$paper" 'BEGIN { printf "%.2f%%,%.2f%%", b*100/255, p*100/255 }'),$var_opt_gamma_min")
+        lvl_info0="papier $paper → biel · czerń $black0 → 0 · gamma $var_opt_gamma_min"
     fi
 }
 
@@ -257,11 +267,10 @@ trap cleanup INT
 do_scan() {
     # zwraca: 0 = OK, 1 = błąd, 2 = podajnik ADF pusty
     local res=$1 mode=$2 label=$3 source=$4
-    local base num orig opt t0 t1
+    local base num orig t0 t1
     base="scan_${var_site}_D${stamp}"
     num=$(printf "%03d" "$x")
     orig="$var_output_path/${base}_org_$num.$ext"
-    opt="$var_output_path/${base}_opt_$num.jpg"
 
     printf '\n   %s⟳ %s%s %s(%s · %s dpi%s)%s\n' "$C" "$label" "$R" "$D" "$mode" "$res" "${source:+ · $source}" "$R"
     printf '\e[?25l'
@@ -317,27 +326,39 @@ do_scan() {
     else
         opt_args+=(-colorspace Gray)
     fi
-    lvl_info="wyłączona"
-    if [ "$var_opt_enhance" = 1 ]; then
-        auto_levels "$orig" "$mode" "$p1" "$p2"
-        opt_args+=("${lvl_args[@]}")
+    lvl_info="wyłączona"; lvl_info0="wyłączona"
+    [ "$var_opt_enhance" = 1 ] && auto_levels "$orig" "$mode" "$p1" "$p2"
+
+    # pliki wynikowe: Color – _opt_; Gray – _op0_ (minimalna korekta) i _op9_ (mocna)
+    local tags=() tag out k=0 args
+    if [ "$mode" = Color ]; then
+        tags=(opt)
+    else
+        tags=(op0)
+        [ "$var_opt_enhance" = 1 ] && tags+=(op9)
     fi
-    convert -monitor -units PixelsPerInch -density "$res" "$orig" "${opt_args[@]}" "$opt" 2> "$monlog" &
-    track $! im "$p2" 1000 "Optymalizacja" "JPEG"
+    for tag in "${tags[@]}"; do
+        out="$var_output_path/${base}_${tag}_$num.jpg"
+        args=("${opt_args[@]}")
+        if [ "$var_opt_enhance" = 1 ]; then
+            if [ "$tag" = op0 ]; then args+=("${lvl_args0[@]}"); else args+=("${lvl_args[@]}"); fi
+        fi
+        convert -monitor -units PixelsPerInch -density "$res" "$orig" "${args[@]}" "$out" 2> "$monlog" &
+        track $! im $(( p2 + (1000 - p2) * k / ${#tags[@]} )) $(( p2 + (1000 - p2) * (k + 1) / ${#tags[@]} )) \
+            "Optymalizacja" "JPEG $tag"
+        chmod 664 "$out"
+        k=$(( k + 1 ))
+    done
     bar_end ok "Optymalizacja" "$(fmt_secs $(( $(now_ms) - t1 )))"
     printf '\e[?25h'
-    chmod 664 "$orig" "$opt"
+    chmod 664 "$orig"
     in_progress=""
 
     # informacje o plikach
-    local w h ow oh size_o size_p saving
+    local w h ow oh size_o size_p saving info name
     read -r w h < <(identify -format '%w %h' "$orig")
-    read -r ow oh < <(identify -format '%w %h' "$opt")
     size_o=$(stat -c%s "$orig")
-    size_p=$(stat -c%s "$opt")
-    saving=$(( 100 - size_p * 100 / size_o ))
     total_orig=$(( total_orig + size_o ))
-    total_opt=$(( total_opt + size_p ))
 
     printf '\n   %s✔ Strona %03d zapisana%s  %s%d s · %d×%d mm%s\n' "$G$B" "$((x + 1))" "$R" "$D" \
         "$((SECONDS - t0))" "$(( w * 254 / (res * 10) ))" "$(( h * 254 / (res * 10) ))" "$R"
@@ -345,10 +366,22 @@ do_scan() {
     printf '     Oryginał    %s\n' "$(basename "$orig")"
     printf '     %-11s %s%9s%s   %d×%d px · %d dpi · %s · %s\n' "" "$B" "$(human "$size_o")" "$R" \
         "$w" "$h" "$res" "$mode" "${ext^^}"
-    printf '     %-11s %s\n' "Optymalny" "$(basename "$opt")"
-    printf '     %-11s %s%9s%s   %d×%d px · %d dpi · JPEG q%d   %s−%d%%%s\n' "" "$G$B" "$(human "$size_p")" "$R" \
-        "$ow" "$oh" "$opt_dpi" "$var_opt_quality" "$G" "$saving" "$R"
-    printf '     Korekcja    %s%s%s\n' "$D" "$lvl_info" "$R"
+    for tag in "${tags[@]}"; do
+        out="$var_output_path/${base}_${tag}_$num.jpg"
+        case $tag in
+            op0) name="Op0 (min)"; info=$lvl_info0 ;;
+            op9) name="Op9 (max)"; info=$lvl_info ;;
+            *)   name="Optymalny"; info=$lvl_info ;;
+        esac
+        read -r ow oh < <(identify -format '%w %h' "$out")
+        size_p=$(stat -c%s "$out")
+        saving=$(( 100 - size_p * 100 / size_o ))
+        total_opt=$(( total_opt + size_p ))
+        printf '     %-11s %s\n' "$name" "$(basename "$out")"
+        printf '     %-11s %s%9s%s   %d×%d px · %d dpi · JPEG q%d   %s−%d%%%s\n' "" "$G$B" "$(human "$size_p")" "$R" \
+            "$ow" "$oh" "$opt_dpi" "$var_opt_quality" "$G" "$saving" "$R"
+        printf '     %-11s %s%s%s\n' "" "$D" "$info" "$R"
+    done
 
     x=$((x + 1))
 }
