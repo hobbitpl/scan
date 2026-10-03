@@ -39,7 +39,7 @@ show_menu() {
     printf '   %s[Enter]%s  Standard       %s%s · %s dpi%s\n' "$Y" "$R" "$D" "$var_mode" "$var_resolution" "$R"
     printf '   %s[1]%s      Kolor HQ       %sColor · 600 dpi%s\n' "$Y" "$R" "$D" "$R"
     printf '   %s[0]%s      Kolor szybki   %sColor · 150 dpi%s\n' "$Y" "$R" "$D" "$R"
-    printf '   %s[q]%s      Zakończ\n' "$Y" "$R"
+    printf '   %s[q/Esc]%s  Zakończ\n' "$Y" "$R"
     printf '\n   Wybór %s›%s ' "$C" "$R"
 }
 
@@ -163,12 +163,16 @@ do_scan() {
 
 while :; do
     show_menu
-    read -rsn1 key
+    read -rsn1 key || cleanup
     case "$key" in
         1)     do_scan 600 Color "Kolor HQ" ;;
         0)     do_scan 150 Color "Kolor szybki" ;;
         "")    do_scan "$var_resolution" "$var_mode" "Standard" ;;
         q|Q)   cleanup ;;
+        $'\e')
+            # sam Esc kończy; strzałki/F1… to Esc + dalsze znaki – ignoruj
+            read -rsn5 -t 0.05 rest
+            [ -z "$rest" ] && cleanup ;;
         *)     printf '\n   %sNieznana opcja: %s%s\n' "$RED" "$key" "$R" ;;
     esac
 done
