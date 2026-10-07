@@ -34,7 +34,7 @@ x=0
 # -------------------------------------------------
 while [[ "$x" -lt "$y" ]]; do
   num=$(printf "%03d" "$x")
-  var_filename="scan@${var_site}_D${var_year}_${var_month}_${var_day}_T${var_hour}_${var_min}_${var_sec}_${num}.jpg"
+  var_filename="${var_year}_${var_month}_${var_day}_h${var_hour}m${var_min}s${var_sec}_scan_${num}.jpg"
   outpath="$var_output_path/$var_filename"
 
   echo "Rozpoczynam skanowanie (strona $((x+1)))..."

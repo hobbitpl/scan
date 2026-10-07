@@ -23,7 +23,7 @@ case "$var_format" in
     *)    ext=$var_format ;;
 esac
 
-stamp=$(date +%Y_%m_%d_T%H_%M_%S)
+stamp=$(date +%Y_%m_%d_h%Hm%Ms%S)
 x=0
 total_orig=0
 total_opt=0
@@ -268,9 +268,9 @@ do_scan() {
     # zwraca: 0 = OK, 1 = błąd, 2 = podajnik ADF pusty
     local res=$1 mode=$2 label=$3 source=$4
     local base num orig t0 t1
-    base="scan_${var_site}_D${stamp}"
+    base="${stamp}_scan"
     num=$(printf "%03d" "$x")
-    orig="$var_output_path/${base}_org_$num.$ext"
+    orig="$var_output_path/${base}_${num}_org.$ext"
 
     printf '\n   %s⟳ %s%s %s(%s · %s dpi%s)%s\n' "$C" "$label" "$R" "$D" "$mode" "$res" "${source:+ · $source}" "$R"
     printf '\e[?25l'
@@ -338,7 +338,7 @@ do_scan() {
         [ "$var_opt_enhance" = 1 ] && tags+=(op9)
     fi
     for tag in "${tags[@]}"; do
-        out="$var_output_path/${base}_${tag}_$num.jpg"
+        out="$var_output_path/${base}_${num}_${tag}.jpg"
         args=("${opt_args[@]}")
         if [ "$var_opt_enhance" = 1 ]; then
             if [ "$tag" = op0 ]; then args+=("${lvl_args0[@]}"); else args+=("${lvl_args[@]}"); fi
@@ -367,7 +367,7 @@ do_scan() {
     printf '     %-11s %s%9s%s   %d×%d px · %d dpi · %s · %s\n' "" "$B" "$(human "$size_o")" "$R" \
         "$w" "$h" "$res" "$mode" "${ext^^}"
     for tag in "${tags[@]}"; do
-        out="$var_output_path/${base}_${tag}_$num.jpg"
+        out="$var_output_path/${base}_${num}_${tag}.jpg"
         case $tag in
             op0) name="Op0 (min)"; info=$lvl_info0 ;;
             op9) name="Op9 (max)"; info=$lvl_info ;;
