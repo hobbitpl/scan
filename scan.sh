@@ -4,7 +4,7 @@
 #  Color – jeden plik _opt_
 #  Gray  – dwa pliki: _op0_ (minimalna korekta) i _op9_ (mocna korekta pod pismo/ołówek)
 clear
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 . "$DIR/local.config"
 
 # wartości domyślne, jeśli brak w local.config
@@ -279,6 +279,13 @@ do_scan() {
     in_progress=$orig
     local src_args=()
     [ -n "$source" ] && src_args=(--source "$source")
+    # skaner mógł się przełączyć na USB (nowy numer urządzenia) – wtedy wykryj go ponownie
+    if [[ "$device" =~ :libusb:([0-9]+):([0-9]+)$ ]] && [ ! -e "/dev/bus/usb/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}" ]; then
+        local backend=${device%%:*} d
+        while read -r d; do
+            [[ "$d" == "$backend":* ]] && { device=$d; break; }
+        done < <(scanimage -f '%d%n' 2>/dev/null)
+    fi
     scanimage -d "$device" "${src_args[@]}" -p --resolution "$res" --mode "$mode" --format="$var_format" \
         > "$orig" 2> "$errlog" &
     if ! track $! scan 0 1000 "Skanowanie" "" "$orig" || [ ! -s "$orig" ]; then
